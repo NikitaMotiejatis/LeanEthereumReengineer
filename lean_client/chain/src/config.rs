@@ -1,23 +1,24 @@
-// src/config.rs
-
 /// Core consensus parameters and chain presets
 /// for the Lean Consensus Experimental Chain.
 
 /// --- Type Wrappers ---
 
+/*
+/// Don't really need this wrapper around u64 now, but it might help in the future.
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Uint64(pub u64);
+pub struct Uint64 (pub u64);
 
 impl Uint64 {
     pub const fn new(value: u64) -> Self {
-        Uint64(value)
+        Uint64 (value)
     }
 
     #[inline]
     pub fn get(&self) -> u64 {
         self.0
     }
-}
+}*/
 
 /// A value in basis points (1/10000).
 /// Valid range: 0 <= value <= 10000
@@ -45,19 +46,19 @@ impl BasisPoint {
 /// --- Time Parameters ---
 
 /// Number of intervals per slot for forkchoice processing.
-pub const INTERVALS_PER_SLOT: Uint64 = Uint64(4);
+pub const INTERVALS_PER_SLOT: u64 = u64(4);
 
 /// The fixed duration of a single slot in milliseconds.
-pub const SLOT_DURATION_MS: Uint64 = Uint64(4000);
+pub const SLOT_DURATION_MS: u64 = u64(4000);
 
 /// The fixed duration of a single slot in seconds.
-pub const SECONDS_PER_SLOT: Uint64 = Uint64(SLOT_DURATION_MS.0 / 1000);
+pub const SECONDS_PER_SLOT: u64 = u64(SLOT_DURATION_MS.0 / 1000);
 
 /// Seconds per forkchoice processing interval.
-pub const SECONDS_PER_INTERVAL: Uint64 = Uint64(SECONDS_PER_SLOT.0 / INTERVALS_PER_SLOT.0);
+pub const SECONDS_PER_INTERVAL: u64 = u64(SECONDS_PER_SLOT.0 / INTERVALS_PER_SLOT.0);
 
 /// The number of slots to look back for justification.
-pub const JUSTIFICATION_LOOKBACK_SLOTS: Uint64 = Uint64(3);
+pub const JUSTIFICATION_LOOKBACK_SLOTS: u64 = u64(3);
 
 /// Deadlines (validated BasisPoint constants).
 pub const PROPOSER_REORG_CUTOFF_BPS: BasisPoint =
@@ -86,22 +87,22 @@ pub const VIEW_FREEZE_CUTOFF_BPS: BasisPoint =
 
 /// --- State List Length Presets ---
 
-pub const HISTORICAL_ROOTS_LIMIT: Uint64 = Uint64(1 << 18); // 2^18
-pub const VALIDATOR_REGISTRY_LIMIT: Uint64 = Uint64(1 << 12); // 2^12
+pub const HISTORICAL_ROOTS_LIMIT: u64 = u64(1 << 18); // 2^18
+pub const VALIDATOR_REGISTRY_LIMIT: u64 = u64(1 << 12); // 2^12
 
 /// --- Chain Configuration Struct ---
 
 #[derive(Clone, Debug)]
 pub struct ChainConfig {
-    pub slot_duration_ms: Uint64,
-    pub second_per_slot: Uint64,
-    pub justification_lookback_slots: Uint64,
+    pub slot_duration_ms: u64,
+    pub second_per_slot: u64,
+    pub justification_lookback_slots: u64,
     pub proposer_reorg_cutoff_bps: BasisPoint,
     pub vote_due_bps: BasisPoint,
     pub fast_confirm_due_bps: BasisPoint,
     pub view_freeze_cutoff_bps: BasisPoint,
-    pub historical_roots_limit: Uint64,
-    pub validator_registry_limit: Uint64,
+    pub historical_roots_limit: u64,
+    pub validator_registry_limit: u64,
 }
 
 /// The Devnet Chain Configuration.
