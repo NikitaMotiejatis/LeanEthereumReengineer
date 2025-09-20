@@ -1,25 +1,6 @@
 /// Core consensus parameters and chain presets
 /// for the Lean Consensus Experimental Chain.
 
-/// --- Type Wrappers ---
-
-/*
-/// Don't really need this wrapper around u64 now, but it might help in the future.
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Uint64 (pub u64);
-
-impl Uint64 {
-    pub const fn new(value: u64) -> Self {
-        Uint64 (value)
-    }
-
-    #[inline]
-    pub fn get(&self) -> u64 {
-        self.0
-    }
-}*/
-
 /// A value in basis points (1/10000).
 /// Valid range: 0 <= value <= 10000
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -27,70 +8,25 @@ pub struct BasisPoint(pub u64);
 
 impl BasisPoint {
     pub const MAX: u64 = 10_000;
-
-    /// Create a new BasisPoint, returning `None` if the value is invalid.
     pub const fn new(value: u64) -> Option<Self> {
-        if value <= Self::MAX {
-            Some(BasisPoint(value))
-        } else {
-            None
-        }
+        if value <= Self::MAX { Some(BasisPoint(value)) } else { None }
     }
-
-    #[inline]
-    pub fn get(&self) -> u64 {
-        self.0
-    }
+    #[inline] pub fn get(&self) -> u64 { self.0 }
 }
 
-/// --- Time Parameters ---
+pub const INTERVALS_PER_SLOT: u64 = 4;
+pub const SLOT_DURATION_MS: u64 = 4_000;
+pub const SECONDS_PER_SLOT: u64 = SLOT_DURATION_MS / 1_000;
+pub const SECONDS_PER_INTERVAL: u64 = SECONDS_PER_SLOT / INTERVALS_PER_SLOT;
+pub const JUSTIFICATION_LOOKBACK_SLOTS: u64 = 3;
 
-/// Number of intervals per slot for forkchoice processing.
-pub const INTERVALS_PER_SLOT: u64 = u64(4);
+pub const PROPOSER_REORG_CUTOFF_BPS: BasisPoint = match BasisPoint::new(2_500) { Some(x) => x, None => panic!() };
+pub const VOTE_DUE_BPS: BasisPoint          = match BasisPoint::new(5_000) { Some(x) => x, None => panic!() };
+pub const FAST_CONFIRM_DUE_BPS: BasisPoint  = match BasisPoint::new(7_500) { Some(x) => x, None => panic!() };
+pub const VIEW_FREEZE_CUTOFF_BPS: BasisPoint= match BasisPoint::new(7_500) { Some(x) => x, None => panic!() };
 
-/// The fixed duration of a single slot in milliseconds.
-pub const SLOT_DURATION_MS: u64 = u64(4000);
-
-/// The fixed duration of a single slot in seconds.
-pub const SECONDS_PER_SLOT: u64 = u64(SLOT_DURATION_MS.0 / 1000);
-
-/// Seconds per forkchoice processing interval.
-pub const SECONDS_PER_INTERVAL: u64 = u64(SECONDS_PER_SLOT.0 / INTERVALS_PER_SLOT.0);
-
-/// The number of slots to look back for justification.
-pub const JUSTIFICATION_LOOKBACK_SLOTS: u64 = u64(3);
-
-/// Deadlines (validated BasisPoint constants).
-pub const PROPOSER_REORG_CUTOFF_BPS: BasisPoint =
-    match BasisPoint::new(2500) {
-        Some(bps) => bps,
-        None => panic!("Invalid proposer cutoff basis points"),
-    };
-
-pub const VOTE_DUE_BPS: BasisPoint =
-    match BasisPoint::new(5000) {
-        Some(bps) => bps,
-        None => panic!("Invalid vote due basis points"),
-    };
-
-pub const FAST_CONFIRM_DUE_BPS: BasisPoint =
-    match BasisPoint::new(7500) {
-        Some(bps) => bps,
-        None => panic!("Invalid fast confirm basis points"),
-    };
-
-pub const VIEW_FREEZE_CUTOFF_BPS: BasisPoint =
-    match BasisPoint::new(7500) {
-        Some(bps) => bps,
-        None => panic!("Invalid view freeze cutoff basis points"),
-    };
-
-/// --- State List Length Presets ---
-
-pub const HISTORICAL_ROOTS_LIMIT: u64 = u64(1 << 18); // 2^18
-pub const VALIDATOR_REGISTRY_LIMIT: u64 = u64(1 << 12); // 2^12
-
-/// --- Chain Configuration Struct ---
+pub const HISTORICAL_ROOTS_LIMIT: u64   = 1u64 << 18;
+pub const VALIDATOR_REGISTRY_LIMIT: u64 = 1u64 << 12;
 
 #[derive(Clone, Debug)]
 pub struct ChainConfig {
@@ -105,7 +41,6 @@ pub struct ChainConfig {
     pub validator_registry_limit: u64,
 }
 
-/// The Devnet Chain Configuration.
 pub const DEVNET_CONFIG: ChainConfig = ChainConfig {
     slot_duration_ms: SLOT_DURATION_MS,
     second_per_slot: SECONDS_PER_SLOT,
@@ -117,3 +52,13 @@ pub const DEVNET_CONFIG: ChainConfig = ChainConfig {
     historical_roots_limit: HISTORICAL_ROOTS_LIMIT,
     validator_registry_limit: VALIDATOR_REGISTRY_LIMIT,
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test] fn time_math_is_consistent() {
+        assert_eq!(SLOT_DURATION_MS, 4_000);
+        assert_eq!(SECONDS_PER_SLOT, 4);
+        assert_eq!(SECONDS_PER_INTERVAL, 1);
+    }
+}

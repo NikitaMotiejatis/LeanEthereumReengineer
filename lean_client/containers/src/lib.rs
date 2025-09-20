@@ -1,14 +1,15 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+pub mod types;
+pub mod config;
+pub mod slot;
+pub mod checkpoint;
+pub mod vote;
+pub mod block;
+pub mod state;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use block::{Block, BlockBody, BlockHeader, SignedBlock};
+pub use checkpoint::Checkpoint;
+pub use config::Config as ContainerConfig;
+pub use slot::Slot;
+pub use state::State;
+pub use types::{Bytes32, Uint64, ValidatorIndex};
+pub use vote::{SignedVote, Vote};
