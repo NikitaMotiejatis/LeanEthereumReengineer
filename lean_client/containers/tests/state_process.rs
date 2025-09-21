@@ -1,6 +1,6 @@
 // tests/state_process.rs
 use containers::{
-    block::{Block, BlockBody, BlockHeader, SignedBlock, hash_tree_root},
+    block::{Block, BlockBody, hash_tree_root},
     checkpoint::Checkpoint,
     slot::Slot,
     state::State,
