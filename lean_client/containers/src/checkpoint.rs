@@ -1,7 +1,7 @@
 use crate::{Bytes32, Slot};
-use serde::{Deserialize, Serialize};
+use ssz_rs::prelude::*;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, SimpleSerialize, Default)]
 pub struct Checkpoint {
     pub root: Bytes32,
     pub slot: Slot,

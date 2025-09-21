@@ -13,3 +13,5 @@ pub use slot::Slot;
 pub use state::State;
 pub use types::{Bytes32, Uint64, ValidatorIndex};
 pub use vote::{SignedVote, Vote};
+
+pub use ssz_rs;

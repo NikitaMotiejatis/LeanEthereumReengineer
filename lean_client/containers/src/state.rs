@@ -1,13 +1,8 @@
-// NOTE: This `State` holds `containers::config::Config` to mirror the spec exactly.
-// Your runtime can convert from `chain::config::Config` (see chain/src/config.rs).
-use crate::{
-    Bytes32, Checkpoint, ContainerConfig, Slot, Uint64, ValidatorIndex,
-    block::{Block, BlockBody, BlockHeader, SignedBlock},
-};
-use serde::{Deserialize, Serialize};
+use crate::{Bytes32, Checkpoint, ContainerConfig, Slot, Uint64, ValidatorIndex, block::{Block, BlockBody, BlockHeader, SignedBlock, hash_tree_root}, SignedVote};
+use ssz_rs::prelude::*;
 use std::collections::BTreeMap;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, SimpleSerialize, Default)]
 pub struct State {
     // --- configuration (spec-local) ---
     pub config: ContainerConfig,
@@ -21,23 +16,25 @@ pub struct State {
     pub latest_finalized: Checkpoint,
 
     // --- historical data ---
-    pub historical_block_hashes: Vec<Bytes32>,
+    pub historical_block_hashes: List<Bytes32, 8192>,
 
     // --- flattened justification tracking ---
-    pub justified_slots: Vec<bool>,
-    pub justifications_roots: Vec<Bytes32>,
-    pub justifications_validators: Vec<bool>, // concatenated chunks per-root
+    pub justified_slots: Vector<bool, 8192>,
+    pub justifications_roots: Vector<Bytes32, 8192>,
+    pub justifications_validators: Vector<bool, 65536>,
 }
 
 impl State {
     pub fn generate_genesis(genesis_time: Uint64, num_validators: Uint64) -> Self {
-        let body = BlockBody { attestations: vec![] };
+        let mut body = BlockBody {
+            attestations: List::default()
+        };
         let header = BlockHeader {
             slot: Slot(0),
-            proposer_index: Uint64(0),
+            proposer_index: ValidatorIndex(0),
             parent_root: Bytes32([0; 32]),
             state_root: Bytes32([0; 32]),
-            body_root: ssz_merkle_root_of_body(&body),
+            body_root: hash_tree_root(&mut body),
         };
         Self {
             config: ContainerConfig { genesis_time: genesis_time.0, num_validators: num_validators.0 },
@@ -45,10 +42,10 @@ impl State {
             latest_block_header: header,
             latest_justified: Checkpoint { root: Bytes32([0; 32]), slot: Slot(0) },
             latest_finalized: Checkpoint { root: Bytes32([0; 32]), slot: Slot(0) },
-            historical_block_hashes: vec![],
-            justified_slots: vec![],
-            justifications_roots: vec![],
-            justifications_validators: vec![],
+            historical_block_hashes: List::default(),
+            justified_slots: Vector::default(),
+            justifications_roots: Vector::default(),
+            justifications_validators: Vector::default(),
         }
     }
 
@@ -74,20 +71,224 @@ impl State {
         let limit = self.config.num_validators as usize;
         let mut roots: Vec<_> = map.keys().cloned().collect();
         roots.sort();
+
         let mut flat = Vec::with_capacity(roots.len() * limit);
         for r in &roots {
             let v = map.remove(r).expect("root present");
             assert_eq!(v.len(), limit, "vote vector must match validator limit");
             flat.extend_from_slice(&v);
         }
-        self.justifications_roots = roots;
-        self.justifications_validators = flat;
+
+        self.justifications_roots = Vector::try_from(roots).unwrap_or_default();
+        self.justifications_validators = Vector::try_from(flat).unwrap_or_default();
         self
     }
-}
 
-// Stub for now; swap with real SSZ tree-hash when ready.
-fn ssz_merkle_root_of_body(_body: &BlockBody) -> Bytes32 { Bytes32([0; 32]) }
+    pub fn with_historical_hashes(mut self, hashes: Vec<Bytes32>) -> Self {
+        self.historical_block_hashes = List::try_from(hashes).unwrap_or_default();
+        self
+    }
+
+    pub fn state_transition(&self, signed_block: SignedBlock, valid_signatures: bool) -> Self {
+        assert!(valid_signatures, "Block signatures must be valid");
+
+        let block = signed_block.message;
+        let mut state = self.process_slots(block.slot);
+        state = state.process_block(&block);
+
+        let mut state_for_hash = state.clone();
+        let state_root = hash_tree_root(&mut state_for_hash);
+        assert!(block.state_root == state_root, "Invalid block state root");
+
+        state
+    }
+
+    pub fn process_slots(&self, target_slot: Slot) -> Self {
+        assert!(self.slot < target_slot, "Target slot must be in the future");
+
+        let mut state = self.clone();
+
+        while state.slot < target_slot {
+            state = state.process_slot();
+            state.slot = Slot(state.slot.0 + 1);
+        }
+
+        state
+    }
+
+    pub fn process_slot(&self) -> Self {
+        if self.latest_block_header.state_root == Bytes32([0; 32]) {
+            let mut state_for_hash = self.clone();
+            let previous_state_root = hash_tree_root(&mut state_for_hash);
+
+            let mut new_header = self.latest_block_header.clone();
+            new_header.state_root = previous_state_root;
+
+            let mut new_state = self.clone();
+            new_state.latest_block_header = new_header;
+            return new_state;
+        }
+
+        self.clone()
+    }
+
+    pub fn process_block(&self, block: &Block) -> Self {
+        let state = self.process_block_header(block);
+        state.process_operations(&block.body)
+    }
+
+    pub fn process_block_header(&self, block: &Block) -> Self {
+        assert!(block.slot == self.slot, "Block slot mismatch");
+        assert!(block.slot > self.latest_block_header.slot, "Block is older than latest header");
+        assert!(self.is_proposer(block.proposer_index), "Incorrect block proposer");
+
+        // Create a mutable clone for hash computation
+        let mut latest_header_for_hash = self.latest_block_header.clone();
+        let parent_root = hash_tree_root(&mut latest_header_for_hash);
+        assert!(block.parent_root == parent_root, "Block parent root mismatch");
+
+        let mut new_historical_hashes = self.historical_block_hashes.to_vec();
+        new_historical_hashes.push(parent_root);
+
+        let mut new_justified_slots = self.justified_slots.to_vec();
+        new_justified_slots.push(self.latest_block_header.slot == Slot(0));
+
+        let num_empty_slots = (block.slot.0 - self.latest_block_header.slot.0 - 1) as usize;
+        if num_empty_slots > 0 {
+            new_historical_hashes.extend(vec![Bytes32([0; 32]); num_empty_slots]);
+            new_justified_slots.extend(vec![false; num_empty_slots]);
+        }
+
+        let mut body_for_hash = block.body.clone();
+        let body_root = hash_tree_root(&mut body_for_hash);
+
+        let mut new_latest_block_header = BlockHeader {
+            slot: block.slot,
+            proposer_index: block.proposer_index,
+            parent_root: block.parent_root,
+            body_root,
+            state_root: Bytes32([0; 32]),
+        };
+
+        let mut new_latest_justified = self.latest_justified.clone();
+        let mut new_latest_finalized = self.latest_finalized.clone();
+
+        if self.latest_block_header.slot == Slot(0) {
+            new_latest_justified.root = parent_root;
+            new_latest_finalized.root = parent_root;
+        }
+
+        Self {
+            config: self.config.clone(),
+            slot: self.slot,
+            latest_block_header: new_latest_block_header,
+            latest_justified: new_latest_justified,
+            latest_finalized: new_latest_finalized,
+            historical_block_hashes: List::try_from(new_historical_hashes).unwrap_or_default(),
+            justified_slots: Vector::try_from(new_justified_slots).unwrap_or_default(),
+            justifications_roots: self.justifications_roots.clone(),
+            justifications_validators: self.justifications_validators.clone(),
+        }
+    }
+
+    pub fn process_operations(&self, body: &BlockBody) -> Self {
+        self.process_attestations(&body.attestations) // Pass reference to attestations
+    }
+
+    pub fn process_attestations(&self, attestations: &List<SignedVote, 1024>) -> Self {
+        let mut justifications = self.get_justifications();
+        let mut latest_justified = self.latest_justified.clone();
+        let mut latest_finalized = self.latest_finalized.clone();
+        let mut justified_slots = self.justified_slots.to_vec();
+
+        for i in 0..attestations.len() {
+            if let Some(signed_vote) = attestations.get(i) {
+                let vote = signed_vote.data.clone();
+                let target_slot = vote.target.slot;
+                let source_slot = vote.source.slot;
+                let target_root = vote.target.root;
+                let source_root = vote.source.root;
+
+                let target_slot_int = target_slot.0 as usize;
+                let source_slot_int = source_slot.0 as usize;
+
+                let source_is_justified = justified_slots.get(source_slot_int).copied().unwrap_or(false);
+                let target_already_justified = justified_slots.get(target_slot_int).copied().unwrap_or(false);
+
+                let source_root_matches_history = self.historical_block_hashes.get(source_slot_int)
+                    .map(|&root| root == source_root)
+                    .unwrap_or(false);
+
+                let target_root_matches_history = self.historical_block_hashes.get(target_slot_int)
+                    .map(|&root| root == target_root)
+                    .unwrap_or(false);
+
+                let mut latest_header_for_hash = self.latest_block_header.clone();
+                let target_matches_latest_header = target_slot == self.latest_block_header.slot &&
+                    target_root == hash_tree_root(&mut latest_header_for_hash);
+
+                let target_root_is_valid = target_root_matches_history || target_matches_latest_header;
+                let target_is_after_source = target_slot > source_slot;
+                let target_is_justifiable = target_slot.is_justifiable_after(latest_finalized.slot);
+
+                let is_valid_vote = source_is_justified &&
+                    !target_already_justified &&
+                    source_root_matches_history &&
+                    target_root_is_valid &&
+                    target_is_after_source &&
+                    target_is_justifiable;
+
+                if !is_valid_vote {
+                    continue;
+                }
+
+                if !justifications.contains_key(&target_root) {
+                    let limit = self.config.num_validators as usize;
+                    justifications.insert(target_root, vec![false; limit]);
+                }
+
+                let validator_id = vote.validator_id.0 as usize;
+                if let Some(votes) = justifications.get_mut(&target_root) {
+                    if validator_id < votes.len() && !votes[validator_id] {
+                        votes[validator_id] = true;
+
+                        let count = votes.iter().filter(|&&v| v).count();
+                        if 3 * count >= 2 * self.config.num_validators as usize {
+                            latest_justified = vote.target;
+
+                            while justified_slots.len() <= target_slot_int {
+                                justified_slots.push(false);
+                            }
+                            justified_slots[target_slot_int] = true;
+
+                            justifications.remove(&target_root);
+
+                            let mut is_finalizable = true;
+                            for s in (source_slot_int + 1)..target_slot_int {
+                                if Slot(s as u64).is_justifiable_after(latest_finalized.slot) {
+                                    is_finalizable = false;
+                                    break;
+                                }
+                            }
+
+                            if is_finalizable {
+                                latest_finalized = vote.source;
+                            }
+                        }
+                    }
+                }
+            }
+            }
+
+        let mut new_state = self.clone().with_justifications(justifications);
+
+        new_state.latest_justified = latest_justified;
+        new_state.latest_finalized = latest_finalized;
+        new_state.justified_slots = Vector::try_from(justified_slots).unwrap_or_default();
+
+        new_state
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -104,5 +305,34 @@ mod tests {
         assert!(Slot(1).is_justifiable_after(Slot(0)));
         assert!(Slot(9).is_justifiable_after(Slot(0))); // perfect square
         assert!(Slot(6).is_justifiable_after(Slot(0))); // pronic (2*3)
+    }
+
+    #[test]
+    fn test_hash_tree_root() {
+        let mut body = BlockBody {
+            attestations: List::default()
+        };
+        let mut block = Block {
+            slot: Slot(1),
+            proposer_index: ValidatorIndex(0),
+            parent_root: Bytes32([0; 32]),
+            state_root: Bytes32([0; 32]),
+            body,
+        };
+
+        let root = hash_tree_root(&mut block);
+        assert_ne!(root, Bytes32([0; 32])); // Should compute actual hash
+    }
+
+    #[test]
+    fn test_process_slots() {
+        let genesis_state = State::generate_genesis(Uint64(0), Uint64(10));
+        let target_slot = Slot(5);
+
+        let new_state = genesis_state.process_slots(target_slot);
+
+        assert_eq!(new_state.slot, target_slot);
+        let mut genesis_state_for_hash = genesis_state.clone(); //this is sooooo bad
+        assert_eq!(new_state.latest_block_header.state_root, hash_tree_root(&mut genesis_state_for_hash));
     }
 }
