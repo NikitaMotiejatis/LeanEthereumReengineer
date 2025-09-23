@@ -2,6 +2,11 @@ use crate::{Bytes32, Checkpoint, ContainerConfig, Slot, Uint64, ValidatorIndex, 
 use ssz_rs::prelude::*;
 use std::collections::BTreeMap;
 
+// Limits used across justification tracking
+pub const VALIDATOR_REGISTRY_LIMIT: usize = 65_536; // 65536
+pub const JUSTIFICATION_ROOTS_LIMIT: usize = 8_192;  // 8192
+pub const JUSTIFICATIONS_VALIDATORS_MAX: usize = VALIDATOR_REGISTRY_LIMIT * JUSTIFICATION_ROOTS_LIMIT;
+
 #[derive(Clone, Debug, PartialEq, Eq, SimpleSerialize, Default)]
 pub struct State {
     // --- configuration (spec-local) ---
@@ -19,22 +24,21 @@ pub struct State {
     pub historical_block_hashes: List<Bytes32, 8192>,
 
     // --- flattened justification tracking ---
-    pub justified_slots: Vector<bool, 8192>,
-    pub justifications_roots: Vector<Bytes32, 8192>,
-    pub justifications_validators: Vector<bool, 65536>,
+    pub justified_slots: List<bool, 8192>,
+    pub justifications_roots: List<Bytes32, 8192>,
+    // Flattened votes: up to 8192 roots × 65536 validators
+    pub justifications_validators: List<bool, JUSTIFICATIONS_VALIDATORS_MAX>,
 }
 
 impl State {
     pub fn generate_genesis(genesis_time: Uint64, num_validators: Uint64) -> Self {
-        let mut body = BlockBody {
-            attestations: List::default()
-        };
+        let mut body_for_root = BlockBody { attestations: List::default() };
         let header = BlockHeader {
             slot: Slot(0),
             proposer_index: ValidatorIndex(0),
             parent_root: Bytes32([0; 32]),
             state_root: Bytes32([0; 32]),
-            body_root: hash_tree_root(&mut body),
+            body_root: hash_tree_root(&mut body_for_root),
         };
         Self {
             config: ContainerConfig { genesis_time: genesis_time.0, num_validators: num_validators.0 },
@@ -43,9 +47,9 @@ impl State {
             latest_justified: Checkpoint { root: Bytes32([0; 32]), slot: Slot(0) },
             latest_finalized: Checkpoint { root: Bytes32([0; 32]), slot: Slot(0) },
             historical_block_hashes: List::default(),
-            justified_slots: Vector::default(),
-            justifications_roots: Vector::default(),
-            justifications_validators: Vector::default(),
+            justified_slots: List::default(),
+            justifications_roots: List::default(),
+            justifications_validators: List::default(),
         }
     }
 
@@ -55,20 +59,22 @@ impl State {
     }
 
     pub fn get_justifications(&self) -> BTreeMap<Bytes32, Vec<bool>> {
-        let limit = self.config.num_validators as usize;
+        // Chunk validator votes per root using the fixed registry limit
+        let limit = VALIDATOR_REGISTRY_LIMIT;
         self.justifications_roots
             .iter()
             .enumerate()
             .map(|(i, root)| {
                 let start = i * limit;
                 let end = start + limit;
-                (*root, self.justifications_validators[start..end].to_vec())
+                (*root, self.justifications_validators.as_ref()[start..end].to_vec())
             })
             .collect()
     }
 
     pub fn with_justifications(mut self, mut map: BTreeMap<Bytes32, Vec<bool>>) -> Self {
-        let limit = self.config.num_validators as usize;
+        // Expect each root to have exactly `VALIDATOR_REGISTRY_LIMIT` votes
+        let limit = VALIDATOR_REGISTRY_LIMIT;
         let mut roots: Vec<_> = map.keys().cloned().collect();
         roots.sort();
 
@@ -79,8 +85,8 @@ impl State {
             flat.extend_from_slice(&v);
         }
 
-        self.justifications_roots = Vector::try_from(roots).unwrap_or_default();
-        self.justifications_validators = Vector::try_from(flat).unwrap_or_default();
+    self.justifications_roots = List::try_from(roots).unwrap_or_default();
+    self.justifications_validators = List::try_from(flat).unwrap_or_default();
         self
     }
 
@@ -150,7 +156,7 @@ impl State {
         let mut new_historical_hashes = self.historical_block_hashes.to_vec();
         new_historical_hashes.push(parent_root);
 
-        let mut new_justified_slots = self.justified_slots.to_vec();
+    let mut new_justified_slots = self.justified_slots.to_vec();
         new_justified_slots.push(self.latest_block_header.slot == Slot(0));
 
         let num_empty_slots = (block.slot.0 - self.latest_block_header.slot.0 - 1) as usize;
@@ -162,7 +168,7 @@ impl State {
         let mut body_for_hash = block.body.clone();
         let body_root = hash_tree_root(&mut body_for_hash);
 
-        let mut new_latest_block_header = BlockHeader {
+        let new_latest_block_header = BlockHeader {
             slot: block.slot,
             proposer_index: block.proposer_index,
             parent_root: block.parent_root,
@@ -185,7 +191,7 @@ impl State {
             latest_justified: new_latest_justified,
             latest_finalized: new_latest_finalized,
             historical_block_hashes: List::try_from(new_historical_hashes).unwrap_or_default(),
-            justified_slots: Vector::try_from(new_justified_slots).unwrap_or_default(),
+            justified_slots: List::try_from(new_justified_slots).unwrap_or_default(),
             justifications_roots: self.justifications_roots.clone(),
             justifications_validators: self.justifications_validators.clone(),
         }
@@ -199,7 +205,7 @@ impl State {
         let mut justifications = self.get_justifications();
         let mut latest_justified = self.latest_justified.clone();
         let mut latest_finalized = self.latest_finalized.clone();
-        let mut justified_slots = self.justified_slots.to_vec();
+    let mut justified_slots = self.justified_slots.to_vec();
 
         for i in 0..attestations.len() {
             if let Some(signed_vote) = attestations.get(i) {
@@ -243,7 +249,7 @@ impl State {
                 }
 
                 if !justifications.contains_key(&target_root) {
-                    let limit = self.config.num_validators as usize;
+                    let limit = VALIDATOR_REGISTRY_LIMIT;
                     justifications.insert(target_root, vec![false; limit]);
                 }
 
@@ -284,7 +290,7 @@ impl State {
 
         new_state.latest_justified = latest_justified;
         new_state.latest_finalized = latest_finalized;
-        new_state.justified_slots = Vector::try_from(justified_slots).unwrap_or_default();
+    new_state.justified_slots = List::try_from(justified_slots).unwrap_or_default();
 
         new_state
     }
@@ -309,7 +315,7 @@ mod tests {
 
     #[test]
     fn test_hash_tree_root() {
-        let mut body = BlockBody {
+        let body = BlockBody {
             attestations: List::default()
         };
         let mut block = Block {
@@ -335,4 +341,5 @@ mod tests {
         let mut genesis_state_for_hash = genesis_state.clone(); //this is sooooo bad
         assert_eq!(new_state.latest_block_header.state_root, hash_tree_root(&mut genesis_state_for_hash));
     }
+
 }

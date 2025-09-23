@@ -65,9 +65,9 @@ pub fn base_state(config: Config) -> State {
         latest_justified: sample_checkpoint(),
         latest_finalized: sample_checkpoint(),
         historical_block_hashes: List::default(),
-        justified_slots: Vector::default(),
-        justifications_roots: Vector::default(),
-        justifications_validators: Vector::default(),
+        justified_slots: List::default(),
+        justifications_roots: List::default(),
+        justifications_validators: List::default(),
     }
 }
 
