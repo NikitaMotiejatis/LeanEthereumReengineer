@@ -14,10 +14,8 @@ fn test_generate_genesis() {
     assert_eq!(state.config, config);
     assert_eq!(state.slot.0, 0);
 
-    let empty_body = BlockBody {
-        attestations: ssz_rs::prelude::List::default(),
-    };
-    assert_eq!(state.latest_block_header.body_root, hash_tree_root(&mut empty_body.clone()));
+    let empty_body = BlockBody { attestations: ssz::PersistentList::default() };
+    assert_eq!(state.latest_block_header.body_root, hash_tree_root(&empty_body));
 
     
     assert!(state.historical_block_hashes.is_empty());
@@ -43,17 +41,15 @@ fn test_slot_justifiability_rules() {
 
 #[test]
 fn test_hash_tree_root() {
-    let body = BlockBody {
-        attestations: ssz_rs::prelude::List::default(),
-    };
-    let mut block = containers::block::Block {
+    let body = BlockBody { attestations: ssz::PersistentList::default() };
+    let block = containers::block::Block {
         slot: containers::slot::Slot(1),
         proposer_index: ValidatorIndex(0),
-        parent_root: containers::types::Bytes32([0; 32]),
-        state_root: containers::types::Bytes32([0; 32]),
+    parent_root: containers::types::Bytes32(ssz::H256::zero()),
+    state_root: containers::types::Bytes32(ssz::H256::zero()),
         body,
     };
 
-    let root = hash_tree_root(&mut block);
-    assert_ne!(root, containers::types::Bytes32([0; 32]));
+    let root = hash_tree_root(&block);
+    assert_ne!(root, containers::types::Bytes32(ssz::H256::zero()));
 }

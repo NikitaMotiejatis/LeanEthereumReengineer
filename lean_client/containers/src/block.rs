@@ -1,12 +1,15 @@
-use crate::{Bytes32, Slot,  SignedVote, ValidatorIndex, State};
-use ssz_rs::prelude::*;
+use crate::{Bytes32, Slot,  SignedVote, ValidatorIndex};
+use ssz::PersistentList as List;
+use ssz::{SszHash};
+use ssz_derive::Ssz;
+use typenum::U4096;
 
-#[derive(Clone, Debug, PartialEq, Eq, SimpleSerialize, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Ssz, Default)]
 pub struct BlockBody {
-    pub attestations: List<SignedVote, 1024>,
+    pub attestations: List<SignedVote, U4096>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, SimpleSerialize, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Ssz, Default)]
 pub struct BlockHeader {
     pub slot: Slot,
     pub proposer_index: ValidatorIndex,
@@ -15,7 +18,7 @@ pub struct BlockHeader {
     pub body_root: Bytes32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, SimpleSerialize, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Ssz, Default)]
 pub struct Block {
     pub slot: Slot,
     pub proposer_index: ValidatorIndex,
@@ -24,7 +27,7 @@ pub struct Block {
     pub body: BlockBody,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, SimpleSerialize, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Ssz, Default)]
 pub struct SignedBlock {
     pub message: Block,
     /// Placeholder for real signature type
@@ -32,11 +35,7 @@ pub struct SignedBlock {
 }
 
 // Helper function to compute hash tree root
-pub fn hash_tree_root<T: SimpleSerialize>(value: &mut T) -> Bytes32 {
-    let mut result = [0; 32];
-    if let Ok(root) = value.hash_tree_root() {
-        let root_bytes = root.as_ref();
-        result.copy_from_slice(root_bytes);
-    }
-    Bytes32(result)
+pub fn hash_tree_root<T: SszHash>(value: &T) -> Bytes32 {
+    let h = value.hash_tree_root();
+    Bytes32(h)
 }

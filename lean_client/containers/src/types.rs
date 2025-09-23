@@ -1,10 +1,14 @@
-use ssz_rs::prelude::*;
+use ssz::H256;
+use ssz_derive::Ssz;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, SimpleSerialize, Default)]
-pub struct Bytes32(pub [u8; 32]);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Ssz, Default)]
+#[ssz(transparent)]
+pub struct Bytes32(pub H256);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, SimpleSerialize, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Ssz, Default)]
+#[ssz(transparent)]
 pub struct Uint64(pub u64);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, SimpleSerialize, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Ssz, Default)]
+#[ssz(transparent)]
 pub struct ValidatorIndex(pub u64);

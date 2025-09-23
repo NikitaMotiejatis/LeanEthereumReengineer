@@ -9,7 +9,8 @@ use containers::{
 };
 use pretty_assertions::assert_eq;
 use rstest::{fixture, rstest};
-use ssz_rs::prelude::*;
+use ssz::PersistentList as List;
+use typenum::U4096;
 
 #[path = "common.rs"]
 mod common;
@@ -23,12 +24,12 @@ pub fn genesis_state() -> State {
 
 #[test]
 fn test_process_slot() {
-    let mut genesis_state = genesis_state();
+    let genesis_state = genesis_state();
 
-    assert_eq!(genesis_state.latest_block_header.state_root, Bytes32([0; 32]));
+    assert_eq!(genesis_state.latest_block_header.state_root, Bytes32(ssz::H256::zero()));
 
     let state_after_slot = genesis_state.process_slot();
-    let expected_root = hash_tree_root(&mut genesis_state);
+    let expected_root = hash_tree_root(&genesis_state);
 
     assert_eq!(state_after_slot.latest_block_header.state_root, expected_root);
 
@@ -38,13 +39,13 @@ fn test_process_slot() {
 
 #[test]
 fn test_process_slots() {
-    let mut genesis_state = genesis_state();
+    let genesis_state = genesis_state();
     let target_slot = Slot(5);
 
     let new_state = genesis_state.process_slots(target_slot);
 
     assert_eq!(new_state.slot, target_slot);
-    assert_eq!(new_state.latest_block_header.state_root, hash_tree_root(&mut genesis_state));
+    assert_eq!(new_state.latest_block_header.state_root, hash_tree_root(&genesis_state));
 }
 
 #[test]
@@ -60,23 +61,23 @@ fn test_process_slots_backwards() {
 fn test_process_block_header_valid() {
     let genesis_state = genesis_state();
     let mut state_at_slot_1 = genesis_state.process_slots(Slot(1));
-    let genesis_header_root = hash_tree_root(&mut state_at_slot_1.latest_block_header);
+    let genesis_header_root = hash_tree_root(&state_at_slot_1.latest_block_header);
 
     let block = create_block(1, &mut state_at_slot_1.latest_block_header, None).message;
     let new_state = state_at_slot_1.process_block_header(&block);
 
     assert_eq!(new_state.latest_finalized.root, genesis_header_root);
     assert_eq!(new_state.latest_justified.root, genesis_header_root);
-    assert_eq!(new_state.historical_block_hashes.as_ref(), &[genesis_header_root]);
-    assert_eq!(new_state.justified_slots.as_ref(), &[true]);
+    assert_eq!(new_state.historical_block_hashes.as_slice(), &[genesis_header_root]);
+    assert_eq!(new_state.justified_slots.as_slice(), &[true]);
     assert_eq!(new_state.latest_block_header.slot, Slot(1));
-    assert_eq!(new_state.latest_block_header.state_root, Bytes32([0; 32]));
+    assert_eq!(new_state.latest_block_header.state_root, Bytes32(ssz::H256::zero()));
 }
 
 #[rstest]
 #[case(2, 1, None, "Block slot mismatch")]
 #[case(1, 2, None, "Incorrect block proposer")]
-#[case(1, 1, Some(Bytes32([0xde; 32])), "Block parent root mismatch")]
+#[case(1, 1, Some(Bytes32(ssz::H256::from_slice(&[0xde; 32]))), "Block parent root mismatch")]
 fn test_process_block_header_invalid(
     #[case] bad_slot: u64,
     #[case] bad_proposer: u64,
@@ -86,16 +87,14 @@ fn test_process_block_header_invalid(
     let genesis_state = genesis_state();
     let state_at_slot_1 = genesis_state.process_slots(Slot(1));
     let parent_header = &state_at_slot_1.latest_block_header;
-    let parent_root = hash_tree_root(&mut parent_header.clone());
+    let parent_root = hash_tree_root(parent_header);
 
     let block = Block {
         slot: Slot(bad_slot),
         proposer_index: ValidatorIndex(bad_proposer),
         parent_root: bad_parent_root.unwrap_or(parent_root),
-        state_root: Bytes32([0; 32]),
-        body: BlockBody {
-            attestations: List::default(),
-        },
+        state_root: Bytes32(ssz::H256::zero()),
+        body: BlockBody { attestations: List::default() },
     };
 
     let result = std::panic::catch_unwind(|| {
@@ -130,7 +129,7 @@ fn test_process_attestations_justification_and_finalization() {
     };
 
     let checkpoint4 = Checkpoint {
-        root: hash_tree_root(&mut state.latest_block_header),
+        root: hash_tree_root(&state.latest_block_header),
         slot: Slot(4),
     };
 
@@ -143,13 +142,13 @@ fn test_process_attestations_justification_and_finalization() {
                 target: checkpoint4.clone(),
                 source: genesis_checkpoint.clone(),
             },
-            signature: Bytes32([0; 32]),
+            signature: Bytes32(ssz::H256::zero()),
         })
         .collect();
 
-    // Convert Vec to List
-    let votes_list = List::<SignedVote, 1024>::try_from(votes_for_4)
-        .expect("Failed to convert votes to List");
+    // Convert Vec to DynamicList with maximum
+    let mut votes_list: List<_, U4096> = List::default();
+    for v in votes_for_4 { votes_list.push(v).unwrap(); }
 
     let new_state = state.process_attestations(&votes_list);
 

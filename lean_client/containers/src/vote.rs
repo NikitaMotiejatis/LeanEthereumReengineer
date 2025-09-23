@@ -1,7 +1,7 @@
 use crate::{Bytes32, Slot, Uint64, Checkpoint};
-use ssz_rs::prelude::*;
+use ssz_derive::Ssz;
 
-#[derive(Clone, Debug, PartialEq, Eq, SimpleSerialize, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Ssz, Default)]
 pub struct Vote {
     pub validator_id: Uint64,
     pub slot: Slot,
@@ -10,7 +10,7 @@ pub struct Vote {
     pub source: Checkpoint,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, SimpleSerialize, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Ssz, Default)]
 pub struct SignedVote {
     pub data: Vote,
     pub signature: Bytes32, //placeholder

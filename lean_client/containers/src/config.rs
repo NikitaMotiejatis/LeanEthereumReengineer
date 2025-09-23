@@ -1,6 +1,6 @@
-use ssz_rs::prelude::*;
+use ssz_derive::Ssz;
 
-#[derive(Clone, Debug, PartialEq, Eq, SimpleSerialize, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Ssz, Default)]
 pub struct Config {
     /// total validators in the network
     pub num_validators: u64,

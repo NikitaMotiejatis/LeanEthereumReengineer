@@ -21,10 +21,10 @@ fn test_state_transition_full() {
     let signed_block = create_block(1, &mut state_at_slot_1.latest_block_header, None);
     let block = signed_block.message.clone();
 
-    let mut expected_state = state_at_slot_1.process_block(&block.clone());
+    let expected_state = state_at_slot_1.process_block(&block.clone());
 
     let block_with_correct_root = Block {
-        state_root: hash_tree_root(&mut expected_state),
+    state_root: hash_tree_root(&expected_state),
         ..block
     };
 
@@ -47,10 +47,10 @@ fn test_state_transition_invalid_signatures() {
     let signed_block = create_block(1, &mut state_at_slot_1.latest_block_header, None);
     let block = signed_block.message.clone();
 
-    let mut expected_state = state_at_slot_1.process_block(&block.clone());
+    let expected_state = state_at_slot_1.process_block(&block.clone());
 
     let block_with_correct_root = Block {
-        state_root: hash_tree_root(&mut expected_state),
+    state_root: hash_tree_root(&expected_state),
         ..block
     };
 
@@ -71,7 +71,7 @@ fn test_state_transition_bad_state_root() {
     let signed_block = create_block(1, &mut state_at_slot_1.latest_block_header, None);
     let mut block = signed_block.message.clone();
 
-    block.state_root = Bytes32([0; 32]);
+    block.state_root = Bytes32(ssz::H256::zero());
 
     let final_signed_block = SignedBlock {
         message: block,

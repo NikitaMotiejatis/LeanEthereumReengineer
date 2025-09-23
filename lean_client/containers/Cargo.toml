@@ -8,8 +8,9 @@ name = "containers"
 path = "src/lib.rs"
 
 [dependencies]
-ssz_rs = "0.9"
-ssz_rs_derive = "0.9"
+ssz = { git = "https://github.com/grandinetech/grandine", package = "ssz", branch = "develop", submodules = false }
+ssz_derive = { git = "https://github.com/grandinetech/grandine", package = "ssz_derive", branch = "develop", submodules = false }
+typenum = "1"
 
 [dev-dependencies]
 rstest = "0.18"

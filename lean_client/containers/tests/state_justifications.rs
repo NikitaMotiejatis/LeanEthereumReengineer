@@ -6,7 +6,7 @@ use containers::{
 };
 use pretty_assertions::assert_eq;
 use rstest::{fixture, rstest};
-use ssz_rs::prelude::*;
+use ssz::PersistentList as List;
 
 #[path = "common.rs"]
 mod common;
@@ -38,14 +38,14 @@ fn test_get_justifications_empty() {
 #[test]
 fn test_get_justifications_single_root() {
     let mut state = state(sample_config());
-    let root1 = Bytes32([1; 32]);
+    let root1 = Bytes32(ssz::H256::from_slice(&[1u8; 32]));
 
     let mut votes1 = vec![false; DEVNET_CONFIG_VALIDATOR_REGISTRY_LIMIT];
     votes1[2] = true;
     votes1[5] = true;
 
-    state.justifications_roots = List::try_from(vec![root1]).unwrap();
-    state.justifications_validators = List::try_from(votes1.clone()).unwrap();
+    state.justifications_roots = vec![root1];
+    state.justifications_validators = votes1.clone();
 
     let justifications = state.get_justifications();
 
@@ -56,9 +56,9 @@ fn test_get_justifications_single_root() {
 #[test]
 fn test_get_justifications_multiple_roots() {
     let mut state = state(sample_config());
-    let root1 = Bytes32([1; 32]);
-    let root2 = Bytes32([2; 32]);
-    let root3 = Bytes32([3; 32]);
+    let root1 = Bytes32(ssz::H256::from_slice(&[1u8; 32]));
+    let root2 = Bytes32(ssz::H256::from_slice(&[2u8; 32]));
+    let root3 = Bytes32(ssz::H256::from_slice(&[3u8; 32]));
 
     let limit = DEVNET_CONFIG_VALIDATOR_REGISTRY_LIMIT;
 
@@ -73,8 +73,8 @@ fn test_get_justifications_multiple_roots() {
 
     let all_votes = [votes1.clone(), votes2.clone(), votes3.clone()].concat();
 
-    state.justifications_roots = List::try_from(vec![root1, root2, root3]).unwrap();
-    state.justifications_validators = List::try_from(all_votes).unwrap();
+    state.justifications_roots = vec![root1, root2, root3];
+    state.justifications_validators = all_votes;
 
     let justifications = state.get_justifications();
 
@@ -92,8 +92,8 @@ fn test_with_justifications_empty() {
     let config = sample_config();
     let mut initial_state = base_state(config.clone());
 
-    initial_state.justifications_roots = List::try_from(vec![Bytes32([1; 32])]).unwrap();
-    initial_state.justifications_validators = List::try_from(vec![true; DEVNET_CONFIG_VALIDATOR_REGISTRY_LIMIT]).unwrap();
+    initial_state.justifications_roots = vec![Bytes32(ssz::H256::from_slice(&[1u8;32]))];
+    initial_state.justifications_validators = vec![true; DEVNET_CONFIG_VALIDATOR_REGISTRY_LIMIT];
 
     let new_state = initial_state.clone().with_justifications(std::collections::BTreeMap::new());
 
@@ -106,8 +106,8 @@ fn test_with_justifications_empty() {
 #[test]
 fn test_with_justifications_deterministic_order() {
     let state = state(sample_config());
-    let root1 = Bytes32([1; 32]);
-    let root2 = Bytes32([2; 32]);
+    let root1 = Bytes32(ssz::H256::from_slice(&[1u8; 32]));
+    let root2 = Bytes32(ssz::H256::from_slice(&[2u8; 32]));
 
     let limit = DEVNET_CONFIG_VALIDATOR_REGISTRY_LIMIT;
     let votes1 = vec![false; limit];
@@ -122,15 +122,15 @@ fn test_with_justifications_deterministic_order() {
     let expected_roots = vec![root1, root2];
     let expected_validators = [votes1, votes2].concat();
 
-    assert_eq!(new_state.justifications_roots.as_ref(), &expected_roots);
-    assert_eq!(new_state.justifications_validators.as_ref(), &expected_validators);
+    assert_eq!(new_state.justifications_roots, expected_roots);
+    assert_eq!(new_state.justifications_validators, expected_validators);
 }
 
 #[test]
 #[should_panic(expected = "vote vector must match validator limit")]
 fn test_with_justifications_invalid_length() {
     let state = state(sample_config());
-    let root1 = Bytes32([1; 32]);
+    let root1 = Bytes32(ssz::H256::from_slice(&[1u8; 32]));
 
     let invalid_votes = vec![true; DEVNET_CONFIG_VALIDATOR_REGISTRY_LIMIT - 1];
     let mut justifications = std::collections::BTreeMap::new();
@@ -143,26 +143,26 @@ fn test_with_justifications_invalid_length() {
 #[case::empty_justifications(std::collections::BTreeMap::new())]
 #[case::single_root({
     let mut map = std::collections::BTreeMap::new();
-    map.insert(Bytes32([1; 32]), create_votes(&[0]));
+    map.insert(Bytes32(ssz::H256::from_slice(&[1u8; 32])), create_votes(&[0]));
     map
 })]
 #[case::multiple_roots_sorted({
     let mut map = std::collections::BTreeMap::new();
-    map.insert(Bytes32([1; 32]), create_votes(&[0]));
-    map.insert(Bytes32([2; 32]), create_votes(&[1, 2]));
+    map.insert(Bytes32(ssz::H256::from_slice(&[1u8; 32])), create_votes(&[0]));
+    map.insert(Bytes32(ssz::H256::from_slice(&[2u8; 32])), create_votes(&[1, 2]));
     map
 })]
 #[case::multiple_roots_unsorted({
     let mut map = std::collections::BTreeMap::new();
-    map.insert(Bytes32([2; 32]), create_votes(&[1, 2]));
-    map.insert(Bytes32([1; 32]), create_votes(&[0]));
+    map.insert(Bytes32(ssz::H256::from_slice(&[2u8; 32])), create_votes(&[1, 2]));
+    map.insert(Bytes32(ssz::H256::from_slice(&[1u8; 32])), create_votes(&[0]));
     map
 })]
 #[case::complex_unsorted({
     let mut map = std::collections::BTreeMap::new();
-    map.insert(Bytes32([3; 32]), vec![true; DEVNET_CONFIG_VALIDATOR_REGISTRY_LIMIT]);
-    map.insert(Bytes32([1; 32]), create_votes(&[0]));
-    map.insert(Bytes32([2; 32]), create_votes(&[1, 2]));
+    map.insert(Bytes32(ssz::H256::from_slice(&[3u8; 32])), vec![true; DEVNET_CONFIG_VALIDATOR_REGISTRY_LIMIT]);
+    map.insert(Bytes32(ssz::H256::from_slice(&[1u8; 32])), create_votes(&[0]));
+    map.insert(Bytes32(ssz::H256::from_slice(&[2u8; 32])), create_votes(&[1, 2]));
     map
 })]
 fn test_justifications_roundtrip(
