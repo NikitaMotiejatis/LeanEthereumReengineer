@@ -44,8 +44,8 @@ fn test_get_justifications_single_root() {
     votes1[2] = true;
     votes1[5] = true;
 
-    state.justifications_roots = Vector::try_from(vec![root1]).unwrap();
-    state.justifications_validators = Vector::try_from(votes1.clone()).unwrap();
+    state.justifications_roots = List::try_from(vec![root1]).unwrap();
+    state.justifications_validators = List::try_from(votes1.clone()).unwrap();
 
     let justifications = state.get_justifications();
 
@@ -73,8 +73,8 @@ fn test_get_justifications_multiple_roots() {
 
     let all_votes = [votes1.clone(), votes2.clone(), votes3.clone()].concat();
 
-    state.justifications_roots = Vector::try_from(vec![root1, root2, root3]).unwrap();
-    state.justifications_validators = Vector::try_from(all_votes).unwrap();
+    state.justifications_roots = List::try_from(vec![root1, root2, root3]).unwrap();
+    state.justifications_validators = List::try_from(all_votes).unwrap();
 
     let justifications = state.get_justifications();
 
@@ -92,8 +92,8 @@ fn test_with_justifications_empty() {
     let config = sample_config();
     let mut initial_state = base_state(config.clone());
 
-    initial_state.justifications_roots = Vector::try_from(vec![Bytes32([1; 32])]).unwrap();
-    initial_state.justifications_validators = Vector::try_from(vec![true; DEVNET_CONFIG_VALIDATOR_REGISTRY_LIMIT]).unwrap();
+    initial_state.justifications_roots = List::try_from(vec![Bytes32([1; 32])]).unwrap();
+    initial_state.justifications_validators = List::try_from(vec![true; DEVNET_CONFIG_VALIDATOR_REGISTRY_LIMIT]).unwrap();
 
     let new_state = initial_state.clone().with_justifications(std::collections::BTreeMap::new());
 
@@ -173,8 +173,7 @@ fn test_justifications_roundtrip(
     let new_state = state.with_justifications(justifications_map.clone());
     let reconstructed_map = new_state.get_justifications();
 
-    let mut expected_map = justifications_map;
-    expected_map.keys().cloned().collect::<Vec<_>>(); // Sort by key
-
+    let expected_map = justifications_map;
+    // BTreeMap is already ordered by key; direct comparison is deterministic
     assert_eq!(reconstructed_map, expected_map);
 }

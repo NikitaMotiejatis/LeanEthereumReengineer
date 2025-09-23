@@ -43,7 +43,7 @@ fn test_slot_justifiability_rules() {
 
 #[test]
 fn test_hash_tree_root() {
-    let mut body = BlockBody {
+    let body = BlockBody {
         attestations: ssz_rs::prelude::List::default(),
     };
     let mut block = containers::block::Block {
