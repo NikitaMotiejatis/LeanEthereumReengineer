@@ -6,6 +6,9 @@ pub mod vote;
 pub mod block;
 pub mod state;
 
+#[cfg(test)]
+pub mod test_vectors;
+
 pub use block::{Block, BlockBody, BlockHeader, SignedBlock};
 pub use checkpoint::Checkpoint;
 pub use config::Config as ContainerConfig;

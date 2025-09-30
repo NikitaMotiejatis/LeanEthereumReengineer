@@ -1,13 +1,14 @@
 use crate::{Bytes32, Checkpoint, ContainerConfig, Slot, Uint64, ValidatorIndex, block::{Block, BlockBody, BlockHeader, SignedBlock, hash_tree_root}, SignedVote};
 use ssz::PersistentList as List;
 use ssz_derive::Ssz;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub const VALIDATOR_REGISTRY_LIMIT: usize = 1 << 12;     // 4096
 pub const JUSTIFICATION_ROOTS_LIMIT: usize = 1 << 18;    // 262144
 pub const JUSTIFICATIONS_VALIDATORS_MAX: usize = VALIDATOR_REGISTRY_LIMIT * JUSTIFICATION_ROOTS_LIMIT;
 
-#[derive(Clone, Debug, PartialEq, Eq, Ssz, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Ssz, Default, Serialize, Deserialize)]
 pub struct State {
     // --- configuration (spec-local) ---
     pub config: ContainerConfig,
@@ -22,15 +23,19 @@ pub struct State {
 
     // --- historical data ---
     #[ssz(skip)]
+    #[serde(skip)]
     pub historical_block_hashes: Vec<Bytes32>,
 
     // --- flattened justification tracking ---
     #[ssz(skip)]
+    #[serde(skip)]
     pub justified_slots: Vec<bool>,
     #[ssz(skip)]
+    #[serde(skip)]
     pub justifications_roots: Vec<Bytes32>,
     // Flattened votes vector. Enforced by logic/tests to not exceed limits.
     #[ssz(skip)]
+    #[serde(skip)]
     pub justifications_validators: Vec<bool>,
 }
 
