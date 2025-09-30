@@ -1,7 +1,8 @@
 use ssz_derive::Ssz;
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Ssz, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Ssz, Default, Serialize, Deserialize)]
 pub struct Slot(pub u64);
 
 impl PartialOrd for Slot {
